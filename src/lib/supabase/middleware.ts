@@ -12,11 +12,19 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(
+          cookiesToSet: {
+            name: string;
+            value: string;
+            options?: Parameters<typeof supabaseResponse.cookies.set>[2];
+          }[]
+        ) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
+
           supabaseResponse = NextResponse.next({ request });
+
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );
@@ -25,10 +33,9 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Check if we are in demo mode (Supabase not configured)
-  const isDemo = process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("placeholder");
+  const isDemo =
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.includes("placeholder");
 
-  // Bypass auth for demo mode
   if (isDemo) {
     if (request.nextUrl.pathname === "/admin/login") {
       const url = request.nextUrl.clone();
@@ -42,9 +49,10 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protect admin routes
-  if (request.nextUrl.pathname.startsWith("/admin") &&
-      !request.nextUrl.pathname.startsWith("/admin/login")) {
+  if (
+    request.nextUrl.pathname.startsWith("/admin") &&
+    !request.nextUrl.pathname.startsWith("/admin/login")
+  ) {
     if (!user) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";
@@ -52,7 +60,6 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // Redirect logged-in admin away from login page
   if (request.nextUrl.pathname === "/admin/login" && user) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin";
