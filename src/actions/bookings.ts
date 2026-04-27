@@ -73,7 +73,13 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   await updateBookedSeats(input.showtimeId, input.selectedSeats);
 
   if (input.promoCodeUsed) {
-    await supabase.rpc("increment_promo_usage", { promo_code: input.promoCodeUsed }).catch(() => {});
+    const { error: promoError } = await supabase.rpc("increment_promo_usage", {
+      promo_code: input.promoCodeUsed,
+    });
+
+    if (promoError) {
+      console.error("Promo increment failed:", promoError);
+    }
   }
 
   revalidatePath("/", "layout");
