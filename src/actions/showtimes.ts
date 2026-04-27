@@ -55,7 +55,7 @@ export async function getShowtimeById(id: string): Promise<Showtime | null> {
   }
 }
 
-export async function getAllShowtimes(): Promise<(Showtime & { movie: { title: string } })[]> {
+export async function getAllShowtimes(): Promise<any[]> {
   if (!isSupabaseConfigured()) {
     return DEMO_SHOWTIMES.map((st) => {
       const movie = DEMO_MOVIES.find((m) => m.id === st.movie_id);
