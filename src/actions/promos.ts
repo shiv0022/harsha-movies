@@ -1,9 +1,9 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { verifyAdmin, createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, DEMO_PROMOS } from "@/lib/demo-data";
 import type { PromoCode } from "@/lib/types";
+import { revalidatePath } from "next/cache";
 
 export async function validatePromoCode(code: string): Promise<{
   valid: boolean;
@@ -35,34 +35,38 @@ export async function validatePromoCode(code: string): Promise<{
     };
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("promo_codes")
-    .select("*")
-    .eq("code", code.toUpperCase())
-    .eq("is_active", true)
-    .single();
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("promo_codes")
+      .select("*")
+      .eq("code", code.toUpperCase())
+      .eq("is_active", true)
+      .single();
 
-  if (error || !data) {
-    return { valid: false, discount: 0, type: "percentage", message: "Invalid promo code" };
+    if (error || !data) {
+      return { valid: false, discount: 0, type: "percentage", message: "Invalid promo code" };
+    }
+
+    if (data.expiry_date && new Date(data.expiry_date) < new Date()) {
+      return { valid: false, discount: 0, type: "percentage", message: "Promo code has expired" };
+    }
+
+    if (data.usage_limit > 0 && data.times_used >= data.usage_limit) {
+      return { valid: false, discount: 0, type: "percentage", message: "Promo code usage limit reached" };
+    }
+
+    return {
+      valid: true,
+      discount: data.discount_value,
+      type: data.discount_type as "percentage" | "fixed",
+      message: data.discount_type === "percentage"
+        ? `${data.discount_value}% discount applied!`
+        : `₹${data.discount_value} discount applied!`,
+    };
+  } catch {
+    return { valid: false, discount: 0, type: "percentage", message: "Error validating promo code" };
   }
-
-  if (data.expiry_date && new Date(data.expiry_date) < new Date()) {
-    return { valid: false, discount: 0, type: "percentage", message: "Promo code has expired" };
-  }
-
-  if (data.usage_limit > 0 && data.times_used >= data.usage_limit) {
-    return { valid: false, discount: 0, type: "percentage", message: "Promo code usage limit reached" };
-  }
-
-  return {
-    valid: true,
-    discount: data.discount_value,
-    type: data.discount_type as "percentage" | "fixed",
-    message: data.discount_type === "percentage"
-      ? `${data.discount_value}% discount applied!`
-      : `₹${data.discount_value} discount applied!`,
-  };
 }
 
 export async function getPromoCodes(): Promise<PromoCode[]> {
@@ -87,6 +91,7 @@ export async function createPromoCode(promo: Partial<PromoCode>): Promise<PromoC
     .select()
     .single();
   if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
   return data;
 }
 
@@ -101,6 +106,7 @@ export async function updatePromoCode(id: string, updates: Partial<PromoCode>): 
     .select()
     .single();
   if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
   return data;
 }
 
@@ -110,4 +116,5 @@ export async function deletePromoCode(id: string): Promise<void> {
   const supabase = createAdminClient();
   const { error } = await supabase.from("promo_codes").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  revalidatePath("/", "layout");
 }

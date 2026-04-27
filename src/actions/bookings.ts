@@ -1,11 +1,11 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { verifyAdmin, createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, DEMO_BOOKINGS, DEMO_STATS, DEMO_SHOWTIMES, DEMO_MOVIES } from "@/lib/demo-data";
 import type { Booking, DashboardStats } from "@/lib/types";
 import { generateBookingId } from "@/lib/utils";
-import { updateBookedSeats, freeSeats } from "./showtimes";
+import { updateBookedSeats } from "./showtimes";
+import { revalidatePath } from "next/cache";
 
 interface CreateBookingInput {
   showtimeId: string;
@@ -47,7 +47,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     };
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("bookings")
     .insert([{
@@ -76,6 +76,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     await supabase.rpc("increment_promo_usage", { promo_code: input.promoCodeUsed }).catch(() => {});
   }
 
+  revalidatePath("/", "layout");
   return data;
 }
 
@@ -95,14 +96,18 @@ export async function getBookingById(bookingId: string): Promise<Booking | null>
   if (!isSupabaseConfigured()) {
     return DEMO_BOOKINGS.find((b) => b.booking_id === bookingId) || null;
   }
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("bookings")
-    .select("*, showtime:showtimes(*, movie:movies(*))")
-    .eq("booking_id", bookingId)
-    .single();
-  if (error) return null;
-  return data;
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("bookings")
+      .select("*, showtime:showtimes(*, movie:movies(*))")
+      .eq("booking_id", bookingId)
+      .single();
+    if (error) return null;
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 export async function cancelBooking(id: string): Promise<void> {
@@ -138,6 +143,8 @@ export async function cancelBooking(id: string): Promise<void> {
       .update({ booked_seats: updatedSeats })
       .eq("id", booking.showtime_id);
   }
+
+  revalidatePath("/", "layout");
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {

@@ -20,10 +20,18 @@ export function HomeContent({ movies, featuredMovies }: HomeContentProps) {
   const [activeGenre, setActiveGenre] = useState<string | null>(null);
   const [activeLanguage, setActiveLanguage] = useState<string | null>(null);
 
+  // Compare only the date portion (strip time) to avoid timezone-induced
+  // misclassification where e.g. "2026-04-26" parses as midnight UTC and
+  // ends up "in the future" for users in UTC+5:30 earlier in the day.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const nowShowing = useMemo(() => {
-    let filtered = movies.filter(
-      (m) => new Date(m.release_date) <= new Date()
-    );
+    let filtered = movies.filter((m) => {
+      const rel = new Date(m.release_date);
+      rel.setHours(0, 0, 0, 0);
+      return rel <= today;
+    });
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
